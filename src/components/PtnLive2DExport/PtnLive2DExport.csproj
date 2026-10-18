@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup><Reference Include="AssetStudio"><HintPath>../../AssetStudioModGUI_PtN_net6_win64/AssetStudio.dll</HintPath></Reference><Reference Include="K4os.Compression.LZ4"><HintPath>../../AssetStudioModGUI_PtN_net6_win64/K4os.Compression.LZ4.dll</HintPath></Reference></ItemGroup>
+  <ItemGroup>
+    <Reference Include="AssetStudioUtility"><HintPath>../../AssetStudioModGUI_PtN_net6_win64/AssetStudioUtility.dll</HintPath></Reference>
+    <Reference Include="SixLabors.ImageSharp"><HintPath>../../AssetStudioModGUI_PtN_net6_win64/SixLabors.ImageSharp.dll</HintPath></Reference>
+    <None Include="../../AssetStudioModGUI_PtN_net6_win64/*.dll" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+<ItemGroup><Reference Include="Newtonsoft.Json"><HintPath>../../AssetStudioModGUI_PtN_net6_win64/Newtonsoft.Json.dll</HintPath></Reference></ItemGroup></Project>
+
+
