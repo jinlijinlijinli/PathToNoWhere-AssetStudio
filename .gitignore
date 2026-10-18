@@ -1,0 +1,11 @@
+releases/
+*.zip
+__pycache__/
+bin/
+obj/
+build/
+Output/
+*.apk
+*.bundle
+*.moc3
+*.mp4
