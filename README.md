@@ -8,6 +8,11 @@
 
 前往本仓库 **Releases**，下载需要的 ZIP，完整解压后启动 EXE。不要只复制 EXE，也不要在压缩包内运行。仅支持 Windows 10/11 64 位。仓库源码 ZIP 不等于可运行发布包。
 
+## 视频教程
+
+[观看作者的 Bilibili 使用教程](https://www.bilibili.com/video/BV17wJi6jE8W/#reply317419578369)（中文视频）
+
+
 | 发布包 | 用途 | 启动文件 |
 | --- | --- | --- |
 | AssetStudioModGUI_PtN_fix.zip | 浏览、导出支持的 Unity 资源；集成 Live2D 菜单 | AssetStudioModGUI-PtN.exe |
