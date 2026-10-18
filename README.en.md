@@ -8,6 +8,12 @@ Unofficial Windows tools for Path to Nowhere CN Android resources: a patched Ass
 
 Open **Releases**, download the ZIP you need, extract the entire archive, then run its EXE. Keep all DLLs and `_internal` folders. The repository source ZIP is not an application release. Windows 10/11 x64 only.
 
+## Video tutorial
+
+[Watch the author’s tutorial on Bilibili](https://www.bilibili.com/video/BV17wJi6jE8W/#reply317419578369) (in Chinese).
+
+
+
 | Archive | Purpose | Entry point |
 | --- | --- | --- |
 | AssetStudioModGUI_PtN_fix.zip | Browse/export supported Unity resources; integrated Live2D menu | AssetStudioModGUI-PtN.exe |
