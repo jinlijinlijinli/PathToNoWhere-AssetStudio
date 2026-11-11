@@ -1,51 +1,34 @@
 # PathToNoWhere AssetStudio
 
-English | [简体中文](README.md)
+[简体中文](README.md) | English
 
-Unofficial Windows tools for Path to Nowhere CN Android resources: a patched AssetStudio, video downloader, game text exporter, and Live2D extraction/processing tools. Not affiliated with the game publisher.
+An unofficial Windows toolkit for Path to Nowhere CN Android resources: Unity asset export, video downloads, game text export, and Live2D extraction.
 
-## Download
+This guide covers the **2026-11-11 update (client 2.5.2, resource version 10)**. You can use your own downloaded game data without an APK.
 
-Open **Releases**, download the ZIP you need, extract the entire archive, then run its EXE. Keep all DLLs and `_internal` folders. The repository source ZIP is not an application release. Windows 10/11 x64 only.
+## Download and setup
 
-| Archive | Purpose | Entry point |
-| --- | --- | --- |
-| AssetStudioModGUI_PtN_fix.zip | Browse/export supported Unity resources; integrated Live2D menu | AssetStudioModGUI-PtN.exe |
-| PtN-Video-Downloader.zip | Download videos using your APK/media manifest | 无期迷途视频下载工具.exe |
-| PtN-Text-Extractor.zip | Stories, interrogations, emotion checks, supervision and other text | 无期迷途文本提取工具.exe |
-| PtN-Live2D-Tools.zip | Extract/process Live2D models by character | 无期迷途Live2D提取工具.exe |
+Download the updated ZIP from [GitHub Releases](https://github.com/jinlijinlijinli/PathToNoWhere-AssetStudio/releases), extract it completely, and run the appropriate EXE. Keep DLLs and subfolders such as `_internal` next to it. GitHub's automatically generated source ZIP is not a runnable release.
 
-The AssetStudio main application requires .NET 6 Desktop Runtime for Windows x64. Standalone tools bundle their runtime dependencies. The current interfaces are primarily Chinese.
-
+Windows 10/11 x64 is supported. The AssetStudio desktop app requires the **.NET 6 Desktop Runtime (x64)**. The other standalone tools bundle their runtime dependencies.
 
 ## Video tutorial
 
-[Watch the author’s tutorial on Bilibili](https://www.bilibili.com/video/BV17wJi6jE8W/#reply317419578369) (in Chinese).
+[Watch the author's Bilibili tutorial (part 7)](https://www.bilibili.com/video/BV16nvQBYEZp/?p=7) (in Chinese).
 
+## Prepare game data
 
-## Input files
+Copy the downloaded game data from your phone or emulator. The usual root is `Android/data/com.zy.wqmt.cn/files`. Keep directories such as `fs`, `fstier1`, and `fschunk` together. In particular, the current Simplified Chinese text blocks are under `fstier1/blocks`. Use a separate output directory. A matching APK is optional; an APK by itself may omit updated or on-demand resources.
 
-Provide your own matching APK and downloaded game data. The usual data location is `Android/data/com.zy.wqmt.cn/files`, containing `fs`, `fsclassify`, `fschunk`, etc. No APK, game models, textures, text or videos are included. An APK alone may lack downloaded content and updates.
+## Use the tools
 
-## Quick start
+- **AssetStudio** (`AssetStudioModGUI-PtN.exe`): Choose **File → Load folder**, select the game resource root, then filter and export assets. Use the updated build if you see `Invalid chunk header`; it handles the new 64-byte alignment padding.
+- **Video downloader** (`无期迷途视频下载工具.exe`): Select `fs/res_media.json`, choose an output folder, and start downloading. Internet access is required. If you get repeated 404s, check the media base URL; the old 2.4 path may not match the manifest. Use your own playback log and the bundled advanced guide to identify the matching URL.
+- **Text extractor** (`无期迷途文本提取工具.exe`): Select the root containing both `fs` and `fstier1` and leave the APK field blank. Choose story only, selected chapters, or all game text. Load the chapter list before selecting chapters. For all text, open the categorized reading folder and use the CSV index to search. The updated reader supports DPK1/DBC1. This data set yielded 606,920 text IDs and 63 chapter exports without an APK. Branches and options are retained; any unresolved fields are listed in the reports.
+- **Live2D** (`无期迷途Live2D提取工具.exe`): Open the standalone app or the AssetStudio Live2D menu. Select the game resource root and an output location, load the character list, then select and extract characters. If an older extraction stopped at a chunk header error, use the Live2D build with the updated unpacker and select a fresh output folder.
 
-**AssetStudio:** Load files/folders from the File menu, wait for parsing, filter assets and export them. Use the Live2D menu for the integrated extractor. Choose a separate output directory.
-
-**Videos:** Select an APK or `res_media.json`, choose an output directory, then start downloading. Internet is required. The default CDN path may stop working after updates; configure a matching address or identify it from your own playback log. See the bundled advanced guide for log collection. Remove account/device/connection information before sharing logs. A manifest does not necessarily include every historical video.
-
-**Text:** Select the data folder, add the matching APK, choose the recommended all-text mode, and export. Open `全部文本阅读版` for categorized readable text. Interrogation files in `审查/逐条阅读` include linked character story dialogue, options and diaries; filenames may use numeric IDs. `文本索引.csv` indexes decoded configuration strings. For selected chapters, load the chapter list first, search and select chapters, then export. Raw tables, script strings and Unity text are also retained. Some tables are partially decoded; consult reports. Missing downloads and server-only text cannot be recovered. Branches and jump information are preserved without choosing a route.
-
-**Live2D:** Select the folder containing `fs` and related directories, choose output, load the character list, select characters and extract. An extract-all option is available. Initial indexing may take time. Read the bundled quick-start instructions for processing. Compatibility with every external player is not guaranteed.
-
-## Troubleshooting
-
-- Missing resources: finish in-game downloads and use matching APK/data versions.
-- Missing dependencies: extract the whole ZIP; check the AssetStudio desktop runtime.
-- Missing text: inspect error, unresolved-ID and organization reports; partial tables are incomplete.
-- Bug reports: include tool version, steps and sanitized errors. Do not upload private logs, account data or full game dumps.
+For bug reports, include tool version, game version, input directory layout, and a sanitized error. Do not include private logs or game dumps.
 
 ## Source and licensing
 
-`src/text` contains the text tool source. `src/components` contains custom components available in this workspace. Source for some older GUIs was not found; their binaries are supplied through Releases. This is not a fully rebuildable mirror of every upstream component.
-
-Third-party components retain their original licenses; see `licenses` and the release archives. Live2D/Cubism components remain subject to their original terms. Game assets belong to their respective rights holders. This repository does not distribute game assets or bypass account access controls.
+`src/text` contains text tool source; `src/components` contains available scan and unpack components. Some older GUI builds are distributed as binaries only. Third-party licenses are retained in `licenses` and the release archives. The toolkit does not include game APKs or extracted game assets.
