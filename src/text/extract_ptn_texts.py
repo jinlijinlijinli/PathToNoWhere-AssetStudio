@@ -8,6 +8,7 @@ import re
 import struct
 import sys
 import zipfile
+from ptn_dpk import Data, packages, split
 from ptn_text_format import Reader, unwrap, readable, literal_tables
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,7 +83,12 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
     zip_names = set(archive.namelist()) if archive else set()
     manifest = (fs/'res_manifest').read_bytes() if fs and (fs/'res_manifest').is_file() else archive.read('assets/res_manifest') if archive and 'assets/res_manifest' in zip_names else b''
     manifest_paths = {v.decode().lstrip('/') for v in re.findall(rb'/blocks/[0-9a-f]{2}/[0-9a-f]{16}\.bundle',manifest)}
-    candidates = {str(p.relative_to(fs)).replace('\\','/') for p in (fs/'blocks').rglob('*.bundle')} if fs else set()
+    local_blocks={}
+    if fs:
+        for folder in [fs,fs.parent/'fstier1',fs.parent/'fstier2',fs.parent/'fsclassify']:
+            for path in (folder/'blocks').rglob('*.bundle'):
+                local_blocks.setdefault(path.relative_to(folder).as_posix(),path)
+    candidates=set(local_blocks)
     candidates.update(n.removeprefix('assets/') for n in zip_names if n.startswith('assets/blocks/') and n.endswith('.bundle'))
     files = sorted(manifest_paths or candidates)
     input_block_count = len(files)
@@ -96,7 +102,7 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
         files = []
     for number,relative in enumerate(files):
         check_cancel()
-        path = fs/relative if fs else None
+        path = local_blocks.get(relative)
         try:
             if path and path.exists():
                 raw = path.read_bytes()
@@ -106,14 +112,30 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
                 source = str(Path(apk).resolve())+'!assets/'+relative
             else:
                 raise FileNotFoundError(relative)
-            data = raw.translate(TRANSLATE)
-            for entry,offset,chunk in unwrap(data):
+            def entries():
+                if raw.startswith((b'DPK1',b'DBC1')):
+                    for index,(name,container) in enumerate(packages(raw)):
+                        chunk,blob=split(container)
+                        yield index,0,chunk,name,blob
+                    return
+                for data in (raw,raw.translate(TRANSLATE)):
+                    try:
+                        chunks=list(unwrap(data))
+                        if not chunks or not any(x[2].startswith(b'\x1bXX\x07') for x in chunks):
+                            continue
+                    except (ValueError,struct.error):
+                        continue
+                    for entry,offset,chunk in chunks:
+                        yield entry,offset,chunk,None,None
+                    return
+                raise ValueError('Unsupported text block format')
+            for entry,offset,chunk,dpk_name,blob in entries():
                 check_cancel()
                 if not chunk.startswith(b'\x1bXX\x07'):
                     source_rows.append({'source':source,'entry':entry,'status':'not-XX','bytes':len(chunk)})
                     continue
                 sources = re.findall(rb'@[A-Za-z0-9_./-]+\.lua',chunk)
-                internal = sources[-1].decode().lstrip('@') if sources else 'unknown/'+Path(relative).stem+'_'+str(entry)+'.lua'
+                internal = dpk_name or (sources[-1].decode().lstrip('@') if sources else 'unknown/'+Path(relative).stem+'_'+str(entry)+'.lua')
                 # Never use untrusted source paths outside the output folder.
                 if any(part in ('..','') for part in internal.split('/')):
                     raise ValueError('Unsafe internal source path')
@@ -138,6 +160,10 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
                             stream.write(json.dumps({'prototypeIndex':prototype['prototypeIndex'],'constantIndex':constant['index'],'offsetInChunk':constant['offset'],'text':text},ensure_ascii=False)+'\n')
                 record = {'source':source,'entry':entry,'offsetInDecodedBlock':offset,'internalSource':internal,'chunk':str(target.relative_to(OUT)),
                           'strings':count,'chineseStrings':chinese,'prototypes':len(prototypes),'status':'parsed-all-prototypes','sha256':hashlib.sha256(chunk).hexdigest()}
+                if blob is not None:
+                    blob_path=target.with_suffix('.dbc-data')
+                    blob_path.write_bytes(blob)
+                    record['blob']=str(blob_path.relative_to(OUT))
                 source_rows.append(record)
                 extracted.append(record)
         except Exception as exc:
@@ -148,6 +174,9 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
         archive.close()
     write_json(OUT/'来源索引.json',source_rows)
     write_json(OUT/'提取错误.json',errors)
+
+    def dpk(record):
+        return Data((OUT/record['chunk']).read_bytes(),(OUT/record['blob']).read_bytes())
 
     def parse(record):
         chunk = (OUT/record['chunk']).read_bytes()
@@ -160,17 +189,21 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
         raise ValueError('缺少可解析的简体中文 configtexts.lua。请补充同版本 APK，或查看提取错误.json。')
     check_cancel()
     emit('正在还原中文文本 ID 与原文…')
-    constants,tables,_ = parse(language)
-    arrays = [c['value'] for c in constants if isinstance(c['value'],bytes) and len(c['value'])>1000000]
-    ids_bytes,index_bytes = arrays[:2]
-    ids = [v[0] for v in struct.iter_unpack('<Q',ids_bytes)]
-    indexes = [v[0] for v in struct.iter_unpack('<I',index_bytes)]
-    dictionary = max(tables,key=len)
-    assert len(ids)==len(indexes) and max(indexes)==len(dictionary)
-    assert all(isinstance(dictionary[i],bytes) for i in range(1,len(dictionary)+1))
-    decoded_dictionary = {key:value.decode('utf-8') for key,value in dictionary.items()}
-    assert len(set(ids))==len(ids)
-    texts = dict(zip(ids,(decoded_dictionary[i] for i in indexes)))
+    if 'blob' in language:
+        texts, dictionary=dpk(language).language()
+        decoded_dictionary=dict(enumerate(dictionary,1))
+    else:
+        constants,tables,_ = parse(language)
+        arrays = [c['value'] for c in constants if isinstance(c['value'],bytes) and len(c['value'])>1000000]
+        ids_bytes,index_bytes = arrays[:2]
+        ids = [v[0] for v in struct.iter_unpack('<Q',ids_bytes)]
+        indexes = [v[0] for v in struct.iter_unpack('<I',index_bytes)]
+        dictionary = max(tables,key=len)
+        assert len(ids)==len(indexes) and max(indexes)==len(dictionary)
+        assert all(isinstance(dictionary[i],bytes) for i in range(1,len(dictionary)+1))
+        decoded_dictionary = {key:value.decode('utf-8') for key,value in dictionary.items()}
+        assert len(set(ids))==len(ids)
+        texts = dict(zip(ids,(decoded_dictionary[i] for i in indexes)))
     with (OUT/'中文文本ID对照.jsonl').open('w',encoding='utf-8') as stream:
         for ident,text in texts.items():
             stream.write(json.dumps({'id':str(ident),'text':text},ensure_ascii=False)+'\n')
@@ -179,9 +212,12 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
             stream.write(f'【字符串 {index}】\n{text}\n\n')
 
     ui_record = next(r for r in extracted if r['internalSource']=='data/lang/zh-hans/texts.lua')
-    _,ui_tables,_ = parse(ui_record)
-    ui_table = max((t for t in ui_tables if any(isinstance(k,bytes) for k in t)),key=len)
-    ui = {k.decode('utf-8'):v.decode('utf-8') for k,v in ui_table.items() if isinstance(k,bytes) and isinstance(v,bytes)}
+    if 'blob' in ui_record:
+        ui,_=dpk(ui_record).language(ui=True)
+    else:
+        _,ui_tables,_ = parse(ui_record)
+        ui_table = max((t for t in ui_tables if any(isinstance(k,bytes) for k in t)),key=len)
+        ui = {k.decode('utf-8'):v.decode('utf-8') for k,v in ui_table.items() if isinstance(k,bytes) and isinstance(v,bytes)}
     write_json(OUT/'界面与系统文本.json',ui)
 
     unresolved = set()
@@ -260,19 +296,27 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
             continue
         output = None
         try:
-            constants,tables,diagnostics = parse(record)
-            roots = [t for t in tables if isinstance(t.get(1),dict) and isinstance(t.get(2),dict) and b'meta' in t[2]]
-            if not roots:
-                continue
-            table = roots[-1]
-            meta = table[2][b'meta']
-            if 'isText' not in str(meta):
-                continue
-            columns = table[1]
-            views.clear()
-            count = len(column(columns,1) or [])
-            if not count:
-                continue
+            if 'blob' in record:
+                table_data=dpk(record)
+                diagnostics=table_data.diagnostics
+                rows=table_data.rows(localize)
+            else:
+                constants,tables,diagnostics = parse(record)
+                roots = [t for t in tables if isinstance(t.get(1),dict) and isinstance(t.get(2),dict) and b'meta' in t[2]]
+                if not roots:
+                    continue
+                table = roots[-1]
+                meta = table[2][b'meta']
+                if 'isText' not in str(meta):
+                    continue
+                columns = table[1]
+                views.clear()
+                count = len(column(columns,1) or [])
+                if not count:
+                    continue
+                row_count=count
+                rows=(decode_row(columns,meta,i,row_count) for i in range(row_count))
+            count=0
             output = OUT/'本地化配置表'/(record['internalSource']+'.jsonl')
             output.parent.mkdir(parents=True,exist_ok=True)
             is_dialog = record['internalSource']=='data/common_dialog.lua'
@@ -280,10 +324,10 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
                 dialog_folder=OUT/'剧情对话';dialog_folder.mkdir(exist_ok=True)
             text_file = None
             with output.open('w',encoding='utf-8') as stream:
-                for row_index in range(count):
+                for row_index,row in enumerate(rows):
                     if row_index%500==0:
                         check_cancel()
-                    row = decode_row(columns,meta,row_index,count)
+                    count+=1
                     stream.write(json.dumps(row,ensure_ascii=False)+'\n')
                     if is_dialog:
                         if row_index%1000==0:
@@ -304,6 +348,11 @@ def main(game=None, output=None, apk=None, on_progress=None, cancel=None):
                                     if option:text_file.write('【选项】'+str(option)+'\n')
                                 text_file.write('\n')
             if text_file:text_file.close()
+            if not count:
+                output.unlink()
+                continue
+            if diagnostics and 'blob' in record:
+                errors.append({'source':record['internalSource'],'stage':'column warnings','error':'; '.join(diagnostics)})
             table_reports.append({'source':record['internalSource'],'rows':count,'output':str(output.relative_to(OUT)),'diagnostics':diagnostics})
             emit(f'已解析配置表 {record["internalSource"]}：{count} 条。')
         except Exception as exc:

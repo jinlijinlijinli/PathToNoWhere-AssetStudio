@@ -63,7 +63,19 @@ if(args[0]!="-"){
  var chunks=Path.Combine(root,"fschunk");
  if(Directory.Exists(chunks))foreach(var path in Directory.EnumerateFiles(chunks,"*.bin"))try{
   using var stream=File.OpenRead(path);long pos=0;
-  while(pos<stream.Length){stream.Position=pos;var h=new byte[160];int count=stream.Read(h);if(count<60)throw new InvalidDataException("Truncated chunk");byte key=h[7];for(int i=0;i<count;i++)h[i]^=key;if(!h.AsSpan(0,8).SequenceEqual(Encoding.ASCII.GetBytes("UnityFS\0")))throw new InvalidDataException("Unsupported chunk header");int q=12;for(int i=0;i<2;i++){q=Array.IndexOf(h,(byte)0,q)+1;if(q<=0)throw new InvalidDataException("Invalid version string");}long length=System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(h.AsSpan(q,8));if(length<60||length>stream.Length-pos||length>int.MaxValue)throw new InvalidDataException("Invalid bundle size");stream.Position=pos;var data=new byte[(int)length];stream.ReadExactly(data);using var memory=new MemoryStream(data,false);Process(memory,path,Path.GetRelativePath(root,path)+"@"+pos);pos+=length;}
+  while(pos<stream.Length){
+   var h=new byte[160];
+   int ReadHeader(){stream.Position=pos;int n=(int)Math.Min(h.Length,stream.Length-pos);stream.ReadExactly(h.AsSpan(0,n));return n;}
+   bool Valid(int n){if(n<60)return false;for(int i=0;i<8;i++)if((h[i]^h[7])!="UnityFS\0"u8[i])return false;return true;}
+   int count=ReadHeader();
+   if(!Valid(count)){
+    int padding=(int)((64-(pos&63))&63);
+    if(padding==0||padding>count||h.AsSpan(0,padding).ContainsAnyExcept((byte)0))throw new InvalidDataException("Unsupported chunk header at "+pos);
+    pos+=padding;if(pos==stream.Length)break;
+    count=ReadHeader();if(!Valid(count))throw new InvalidDataException("Unsupported aligned chunk header at "+pos);
+   }
+   byte key=h[7];for(int i=0;i<count;i++)h[i]^=key;
+   int q=12;for(int i=0;i<2;i++){q=Array.IndexOf(h,(byte)0,q,count-q)+1;if(q<=0)throw new InvalidDataException("Invalid version string");}if(q+8>count)throw new InvalidDataException("Missing bundle length");long length=System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(h.AsSpan(q,8));if(length<60||length>stream.Length-pos||length>int.MaxValue)throw new InvalidDataException("Invalid bundle size");stream.Position=pos;var data=new byte[(int)length];stream.ReadExactly(data);using var memory=new MemoryStream(data,false);Process(memory,path,Path.GetRelativePath(root,path)+"@"+pos);pos+=length;}
  }catch(Exception ex){Error(path,ex);}
  var builtin=Path.Combine(root,"fs","assets","bin","Data");
  if(Directory.Exists(builtin)){

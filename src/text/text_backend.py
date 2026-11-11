@@ -16,7 +16,7 @@ import extract_ptn_texts as extractor
 import organize_ptn_dialogues as organizer
 import readable_texts
 
-VERSION='1.0.0-full-prototypes'
+VERSION='1.1.0-dpk-2026-11-11'
 HOME=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).parent
 BUNDLE=Path(getattr(sys,'_MEIPASS',Path(__file__).parent))
 

@@ -84,6 +84,21 @@ namespace PtnChunkSupport
             while (pos < source.Length)
             {
                 source.Position = pos; int count = ReadUpTo(source, header, header.Length);
+                // New chunks align the next entry to an absolute 64-byte boundary.
+                // Try the old contiguous layout first; only accept zero-filled padding.
+                if (count >= 1 && (count < 60 || !IsHeader(header, count)))
+                {
+                    int padding = (int)((64 - (pos & 63)) & 63);
+                    if (padding > 0 && padding <= count && IsZeroPadding(header, padding))
+                    {
+                        long next = pos + padding;
+                        if (next == source.Length) break;
+                        source.Position = next;
+                        count = ReadUpTo(source, header, header.Length);
+                        if (count >= 60 && IsHeader(header, count)) pos = next;
+                        else throw new InvalidDataException("Invalid aligned chunk header at " + next);
+                    }
+                }
                 if (count < 60 || !IsHeader(header, count)) throw new InvalidDataException("Invalid chunk header at " + pos);
                 byte key = header[7]; for (int i = 0; i < count; i++) header[i] ^= key;
                 int q = 12;
@@ -105,6 +120,11 @@ namespace PtnChunkSupport
         {
             byte key = data[7]; var magic = Encoding.ASCII.GetBytes("UnityFS\0");
             for (int i = 0; i < magic.Length; i++) if ((byte)(data[i] ^ key) != magic[i]) return false;
+            return true;
+        }
+        private static bool IsZeroPadding(byte[] bytes, int length)
+        {
+            for (int i = 0; i < length; i++) if (bytes[i] != 0) return false;
             return true;
         }
         private static int ReadUpTo(Stream stream, byte[] data, int count)

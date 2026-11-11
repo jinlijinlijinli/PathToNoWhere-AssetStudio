@@ -151,7 +151,7 @@ def readable(value):
     return text
 
 
-def literal_tables(code, constants):
+def literal_tables(code, constants, blob=None):
     """Statically evaluate only literal initialization operations, never script calls.
 
     Known dim.array constructors decode packed numeric arrays. Unknown functions
@@ -166,7 +166,7 @@ def literal_tables(code, constants):
     def get(table, key):
         if table == '__dim__':
             name = readable(key)
-            return '__array__' if name == 'array' else '__dtype__'+str(name)
+            return {'array':'__array__','view':'__view__','strpool':'__strpool__','proxy':'__proxy__'}.get(name,'__dtype__'+str(name))
         return table.get(key) if isinstance(table, dict) else None
 
     index = 0
@@ -206,10 +206,22 @@ def literal_tables(code, constants):
             tables.append(table)
             regs[a] = table
             index += 1  # this format always includes an EXTRAARG after NEWTABLE
+        elif op == 83 and blob is not None:
+            regs[a] = blob
         elif op == 71:
             function = regs.get(a)
-            arguments = [regs.get(j) for j in range(a+1,a+b)]
-            if function == '__array__' and len(arguments) == 2:
+            arguments = [regs.get(j) for j in range(a+1,a+b if b else top)]
+            if blob is not None and function == '__view__':
+                dtype, source, off, size, *extra = arguments
+                if source is not blob or not 0 <= off <= off+size <= len(blob):
+                    raise ValueError('Invalid external view')
+                regs[a] = ('view', dtype, off, size, *extra)
+            elif blob is not None and function == '__strpool__':
+                regs[a] = ('strpool', *[arg for arg in arguments if arg is not blob])
+            elif blob is not None and function == '__proxy__':
+                regs[a] = {'proxy':arguments}
+                tables.append(regs[a])
+            elif function == '__array__'  and len(arguments) == 2:
                 dtype, packed = arguments
                 fmt = formats.get(dtype.removeprefix('__dtype__')) if isinstance(dtype,str) else None
                 if fmt and isinstance(packed,bytes) and len(packed)%struct.calcsize(fmt)==0:
@@ -228,6 +240,9 @@ def literal_tables(code, constants):
                 index += 1
                 start += (code[index]>>7)*256
             start *= 4
+            if blob is not None:
+                start += b >> 6
+                b &= 63
             table = regs.get(a)
             if isinstance(table,dict):
                 count = b if b else max(0,top-a-1)
